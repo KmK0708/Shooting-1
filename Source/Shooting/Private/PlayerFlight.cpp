@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 APlayerFlight::APlayerFlight()
 {
@@ -59,6 +60,24 @@ void APlayerFlight::BeginPlay()
 			subsys->AddMappingContext(imc_myMapping, 0);
 		}
 	}
+
+	// 현재 색상 값을 저장한다.
+	UMaterialInterface* iMat = meshComp->GetMaterial(0);
+	FHashedMaterialParameterInfo param = FHashedMaterialParameterInfo(TEXT("my color"));
+
+	//Material Interface 에서 벡터 파라미터 값을 initColor 변수에 저장한다.
+	iMat->GetVectorParameterValue(param, initColor);
+
+	UE_LOG(LogTemp, Warning, TEXT("R: %f, G: %f, B: %f"), initColor.R, initColor.G, initColor.B);
+	// Material Interface 를 이용해서 Material Instance Dynamic 개체를 만든다.
+	dynamicMat = UMaterialInstanceDynamic::Create(iMat, this);
+
+	// 생성한 다이나믹 매터리얼을 메시에 설정한다.
+	if (dynamicMat != nullptr)
+	{
+		meshComp->SetMaterial(0, dynamicMat);
+	}
+	
 }
 
 void APlayerFlight::Tick(float DeltaTime)
@@ -71,7 +90,7 @@ void APlayerFlight::Tick(float DeltaTime)
 
 	// P = P0 + vt
 	FVector dir = GetActorLocation() + direction * moveSpeed * DeltaTime;
-	SetActorLocation(dir);
+	SetActorLocation(dir, true);
 
 }
 
@@ -99,6 +118,25 @@ void APlayerFlight::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	//PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &APlayerFlight::FireBullet);
 }
 
+// 맞았을시 색변환 함수
+void APlayerFlight::ReservationHitColor(float time)
+{
+	// 1. 색상을 red 색으로 변경한다
+	dynamicMat->SetVectorParameterValue(TEXT("my color"), (FVector4)FLinearColor::Red);
+	// 2. 원래 색상으로 되돌리는 함수를 바인딩한 타이머를 예약한다.
+
+	GetWorld()->GetTimerManager().SetTimer(colorTimer, this, &APlayerFlight::ChangeOriginColor, time, false);
+}
+
+
+
+void APlayerFlight::ChangeOriginColor()
+{
+	// 색을 알아야하니까 헤더에 프라이빗 변수 하나 선언
+	// begin에서 색상값을 저장하며 시작
+	dynamicMat->SetVectorParameterValue(TEXT("my color"), (FVector4)initColor);
+	//my_mat->SetVectorParameterValue(TEXT("Color"), FLinearColor(255, 0, 0, 255)); 위와 동일한 코드
+}
 // 좌우 입력이 있을 때 실행될 함수
 //void APlayerFlight::Horizontal(float value)
 //{
@@ -140,6 +178,9 @@ void APlayerFlight::FireBullet()
 	param.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	GetWorld()->SpawnActor<ABullet>(bulletFactory, spawnPosition, spawnRotation, param);
+
+	//총알 발사 효과음을 생성.
+	UGameplayStatics::PlaySound2D(this, fireSound);
 }
 
 
